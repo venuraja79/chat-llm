@@ -9,8 +9,9 @@ from fastapi.templating import Jinja2Templates
 from langchain.vectorstores import VectorStore
 
 from callback import QuestionGenCallbackHandler, StreamingLLMCallbackHandler
-from query_data import get_chain
+from query_data import get_cohere_chain
 from schemas import ChatResponse
+from langchain.embeddings import SentenceTransformerEmbeddings, CohereEmbeddings
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -26,6 +27,8 @@ async def startup_event():
         global vectorstore
         vectorstore = pickle.load(f)
 
+    print(f"Vector store loaded successfully!")
+
 
 @app.get("/")
 async def get(request: Request):
@@ -38,7 +41,8 @@ async def websocket_endpoint(websocket: WebSocket):
     question_handler = QuestionGenCallbackHandler(websocket)
     stream_handler = StreamingLLMCallbackHandler(websocket)
     chat_history = []
-    qa_chain = get_chain(vectorstore, question_handler, stream_handler)
+    #qa_chain = get_chain(vectorstore, question_handler, stream_handler)
+    qa_chain = get_cohere_chain(vectorstore)
     # Use the below line instead of the above line to enable tracing
     # Ensure `langchain-server` is running
     # qa_chain = get_chain(vectorstore, question_handler, stream_handler, tracing=True)
@@ -46,6 +50,7 @@ async def websocket_endpoint(websocket: WebSocket):
     while True:
         try:
             # Receive and send back the client message
+            print("Waiting for incoming message!")
             question = await websocket.receive_text()
             resp = ChatResponse(sender="you", message=question, type="stream")
             await websocket.send_json(resp.dict())
@@ -54,13 +59,36 @@ async def websocket_endpoint(websocket: WebSocket):
             start_resp = ChatResponse(sender="bot", message="", type="start")
             await websocket.send_json(start_resp.dict())
 
-            result = await qa_chain.acall(
-                {"question": question, "chat_history": chat_history}
-            )
-            chat_history.append((question, result["answer"]))
+            #result = await qa_chain.acall(
+            #    {"question": question, "chat_history": chat_history}
+            #)
+            #chat_history.append((question, result["answer"]))
+            result = qa_chain({"question": question, "chat_history": chat_history})
+            print(f"Result from LLM: {result} ")
+
+            metadata = None
+            if "source_documents" in result:
+                source_docs = result['source_documents']
+                for doc in source_docs:
+                    metadata = doc.metadata
+                    break
+
+            if metadata:
+                if "page" in metadata:
+                    page = metadata["page"]
+                    answer = f"{result['answer']} <br><br> Refer page {page} of {metadata['source']}"
+                else:
+                    answer = f"{result['answer']} <br><br> For more information, refer {metadata['source']}"
+            else:
+                answer = f"{result['answer']}"
+
+            end_resp = ChatResponse(sender="bot", message=answer, type="stream")
+            await websocket.send_json(end_resp.dict())
 
             end_resp = ChatResponse(sender="bot", message="", type="end")
             await websocket.send_json(end_resp.dict())
+
+            chat_history.append((question, result['answer']))
         except WebSocketDisconnect:
             logging.info("websocket disconnect")
             break
@@ -77,4 +105,4 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=9000)
+    uvicorn.run(app, host="0.0.0.0", port=3000)
