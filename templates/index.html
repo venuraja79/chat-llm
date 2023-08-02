@@ -5,25 +5,41 @@
     <title>Aviation Document Question Answering</title>
     <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
     <style>
+        .row {
+            display: flex;
+        }
+        .column{
+            flex: 50%;
+            padding: 10px;
+        }
+        .sources-card-body{
+            margin: 50px auto;
+        }
         .chat-body {
-            width: 550px;
+            width: 600px;
+            float: left;
             margin: 50px auto;
         }
         .card-body {
-            background-color: #333;
-            color: #fff;
+            background-color: white;
+            color: black;
             border-radius: 10px;
+            border: 1px solid gray;
         }
         .server-message {
-            background-color: #444;
+            border: 2px solid #c2e3eb;
+            /*background-color: #444;*/
             padding: 10px;
-            margin: 10px;
+            /*margin: 10px;*/
+            font-size: 12px;
+            margin: 10px 0px;
             border-radius: 10px;
         }
         .client-message {
-            background-color: #555;
+            background-color: #c2e3eb;
+            font-size: 12px;
             padding: 10px;
-            margin: 10px;
+            margin: 10px 0px;
             border-radius: 10px;
         }
         .form-inline {
@@ -48,6 +64,15 @@
         }
         .form-message {
           margin-top: 10px;
+        }
+        .sources-body {
+            margin: 10px;
+            color: black;
+            border-radius: 10px;
+            font-size: 12px;
+            border: none;
+            padding: 10px;
+            background: lightgray;
         }
     </style>
     <script>
@@ -79,6 +104,18 @@
                 } else if (data.type === "info") {
                     var header = document.getElementById('header');
                     header.innerHTML = data.message;
+                } else if (data.type === "sources") {
+                    var sources = document.getElementById('sources');
+                    sources.innerHTML = "";
+                    console.log(data.message);
+                    docs = JSON.parse(data.message);
+                    for(let i=0; i<docs.length; i++){
+                        var div = document.createElement('div');
+                        div.classname = 'sources-body card';
+                        doc = docs[i];
+                        div.innerHTML = <strong><a href='#' class='text-blue-500 underline'>" + doc.filename + "</a></strong></br></br>" + doc.content;
+                        sources.appendChild(div);
+                    }
                 } else if (data.type === "end") {
                     var header = document.getElementById('header');
                     header.innerHTML = "Ask a question";
@@ -118,23 +155,36 @@
 
             // Turn the button into a loading button
             var button = document.getElementById('send');
-            button.innerHTML = "Loading...";
+            button.innerHTML = "Retrieving Results...";
             button.disabled = true;
         }
     </script>
 </head>
-<body class="bg-black">
-    <div class="chat-body card">
-        <div class="card-body p-5">
-            <h4 class="card-title text-center text-xl font-medium"> Aviation AD Document Search </h4>
-            <p class="card-text text-center text-sm" id="header"> Your Question: </p>
-            <hr class="border-gray-500 mb-5" style="margin-top: 20px;">
-            <div id="messages" class="overflow-auto" style="max-height: 500px;">
+<body class="container bg-black" style="margin: auto;">
+    <div class="row">
+        <div class="column">
+            <div class="chat-body card">
+                <div class="card-body p-5">
+                    <h4 class="card-title text-center text-xl font-medium"> Aviation AD Document Search </h4>
+                    <p class="card-text text-center text-sm" id="header"> Your Question: </p>
+                    <hr class="border-gray-500 mb-5" style="margin-top: 20px;">
+                    <div id="messages" class="overflow-auto" style="max-height: 500px;">
+                    </div>
+                    <form action="" class="form-inline mt-5" id="chat-form" onsubmit="sendMessage(event)">
+                        <input type="text" class="form-control" placeholder="Write your question" id="messageText">
+                        <button id="send" type="submit" class="btn btn-primary">Send</button>
+                    </form>
+                </div>
             </div>
-            <form action="" class="form-inline mt-5" id="chat-form" onsubmit="sendMessage(event)">
-                <input type="text" class="form-control" placeholder="Write your question" id="messageText">
-                <button id="send" type="submit" class="btn btn-primary">Send</button>
-            </form>
+        </div>
+        <div class="column">
+            <div class="sources-card-body card">
+                <div class="card-body">
+                    <p id="source-header" class="card-text text-left text-sm"><strong>Reference Documents:</strong></p>
+                    <div id="sources" class="bg-gray sources overflow-auto" style="max-height: 690px;">
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </body>

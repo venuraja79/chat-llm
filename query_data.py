@@ -2,7 +2,7 @@
 #from langchain.callbacks.base import AsyncCallbackManager
 #from langchain.callbacks.tracers import LangChainTracer
 #from langchain.chains import ChatVectorDBChain
-from langchain.chains import CoversationalRetrievalChain
+from langchain.chains import ConversationalRetrievalChain
 from langchain.chains.chat_vector_db.prompts import (CONDENSE_QUESTION_PROMPT,
                                                      QA_PROMPT)
 #from langchain.chains.llm import LLMChain
@@ -12,6 +12,8 @@ from langchain.llms import Cohere
 from langchain.vectorstores.base import VectorStore
 from langchain import PromptTemplate
 
+import boto3
+from langchain.llms.bedrock import Bedrock
 
 '''def get_chain(
     vectorstore: VectorStore, question_handler, stream_handler, tracing: bool = False
@@ -58,9 +60,12 @@ from langchain import PromptTemplate
 
 def get_cohere_chain(vectorstore: VectorStore) -> ConversationalRetrievalChain:
     prompt_template = """Text: {context}
+    
     Question: {question}
     
-    Answer the question based on the text provided.
+    You are an intelligent Aerospace assistant! Create a concise and informative answer for a given question 
+    based solely on the given documents. You must only use information from the given documents. Use an
+    unbiased and journalistic tone. If the answer is not available in the documents, please say 'I don't know'
     """
     PROMPT = PromptTemplate(template=prompt_template, input_variables=["context","question"])
     #chain = load_qa_chain(Cohere(model="command-xlarge-nightly", temperature=0),
@@ -75,3 +80,35 @@ def get_cohere_chain(vectorstore: VectorStore) -> ConversationalRetrievalChain:
         return_source_documents = True,
     )
     return qa
+
+
+def get_bedrock_chain(vectorstore: VectorStore) -> ConversationalRetrievalChain:
+    prompt_template = """Text: {context}
+
+    Question: {question}
+
+    You are an intelligent Aerospace assistant! Create a concise and informative answer for a given question 
+    based solely on the given documents. You must only use information from the given documents. Use an
+    unbiased and journalistic tone. If the answer is not available in the documents, please say 'I don't know'
+    """
+    PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+
+    bedrock_client = boto3.client(service_name='bedrock', region_name='us-east-1',
+                                  endpoint_url='https://bedrock.us-east-1.amazonaws.com',
+                                  aws_access_key_id = '',
+                                  aws_secret_access_key='')
+
+    bedrock_llm = Bedrock(
+        model_id="amazon.titan-tg1-large",
+        client = bedrock_client
+    )
+
+    bedrock_qa = ConversationalRetrievalChain.from_llm(
+        llm=bedrock_llm,
+        retriever=vectorstore.as_retriever(),
+        condense_question_prompt=CONDENSE_QUESTION_PROMPT,
+        condense_question_llm=bedrock_llm,
+        combine_docs_chain_kwargs={"prompt": PROMPT},
+        return_source_documents=True,
+    )
+    return bedrock_qa

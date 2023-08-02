@@ -10,8 +10,10 @@ from langchain.vectorstores import VectorStore
 
 from callback import QuestionGenCallbackHandler, StreamingLLMCallbackHandler
 from query_data import get_cohere_chain
+from query_data import get_bedrock_chain
 from schemas import ChatResponse
 from langchain.embeddings import SentenceTransformerEmbeddings, CohereEmbeddings
+import json
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -42,7 +44,8 @@ async def websocket_endpoint(websocket: WebSocket):
     stream_handler = StreamingLLMCallbackHandler(websocket)
     chat_history = []
     #qa_chain = get_chain(vectorstore, question_handler, stream_handler)
-    qa_chain = get_cohere_chain(vectorstore)
+    # qa_cohere_chain = get_cohere_chain(vectorstore)
+    qa_chain = get_bedrock_chain(vectorstore)
     # Use the below line instead of the above line to enable tracing
     # Ensure `langchain-server` is running
     # qa_chain = get_chain(vectorstore, question_handler, stream_handler, tracing=True)
@@ -67,23 +70,30 @@ async def websocket_endpoint(websocket: WebSocket):
             print(f"Result from LLM: {result} ")
 
             metadata = None
+            sources = []
+            source_docs = None
             if "source_documents" in result:
                 source_docs = result['source_documents']
                 for doc in source_docs:
-                    metadata = doc.metadata
-                    break
+                    sources.append({"content": doc.page_content, "filename": doc.metadata['source']})
 
-            if metadata:
+            '''if metadata:
                 if "page" in metadata:
                     page = metadata["page"]
                     answer = f"{result['answer']} <br><br> Refer page {page} of {metadata['source']}"
                 else:
                     answer = f"{result['answer']} <br><br> For more information, refer {metadata['source']}"
             else:
-                answer = f"{result['answer']}"
+                answer = f"{result['answer']}"'''
 
-            end_resp = ChatResponse(sender="bot", message=answer, type="stream")
-            await websocket.send_json(end_resp.dict())
+            answer = f"{result['answer']}"
+
+            stream_resp = ChatResponse(sender="bot", message=answer, type="stream")
+            await websocket.send_json(stream_resp.dict())
+
+            if source_docs:
+                source_resp = ChatResponse(sender="bot", message=json.dumps(sources), type="sources")
+                await websocket.send_json(source_resp.dict())
 
             end_resp = ChatResponse(sender="bot", message="", type="end")
             await websocket.send_json(end_resp.dict())
